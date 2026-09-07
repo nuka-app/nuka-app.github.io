@@ -4,6 +4,7 @@ import { carteNeuve, reviser, noteDepuisTemps, estDue } from "./sm2.js";
 // Mêmes noms d'événements que l'app iOS : c'est ce qui permet de comparer les
 // deux plateformes dans un seul entonnoir, la propriété `source` les séparant.
 import { suit, suitUneFois, consentement } from "./analytics.js";
+import * as icloud from "./icloud.js";
 
 const vue = document.getElementById("vue");
 const nav = document.getElementById("nav");
@@ -12,8 +13,11 @@ const nav = document.getElementById("nav");
 // Le fragment d'URL sert de route : chaque écran est partageable et le bouton
 // « retour » du navigateur fonctionne sans code supplémentaire.
 
+const CLE_ACCUEIL_VU = "nuka.accueil.vu";
+
 const routes = {
-  "":            () => ecranBibliotheque(),
+  "":            () => ecranAccueil(),
+  "accueil":     () => ecranAccueil(true),
   "bibliotheque": () => ecranBibliotheque(),
   "catalogue":   (p) => ecranCatalogue(p[0]),
   "cours":       (p) => ecranCours(p.join("/")),
@@ -32,6 +36,86 @@ addEventListener("DOMContentLoaded", () => {
   suit("app_started");
   route();
 });
+
+// ── Accueil : connexion iCloud ────────────────────────────────────────────
+//
+// La connexion est PROPOSÉE, jamais imposée. Un mur d'authentification devant
+// un site de révision coûterait exactement ce que la mesure a montré de plus
+// cher : les gens s'arrêtent avant d'avoir rien vu. On montre donc les deux
+// portes côte à côte, et le choix de continuer sans compte est aussi visible
+// que l'autre.
+
+async function ecranAccueil(force = false) {
+  let vu = false;
+  try { vu = localStorage.getItem(CLE_ACCUEIL_VU) === "1"; } catch {}
+  if (vu && !force) return ecranBibliotheque();
+
+  const dispo = icloud.configure();
+  const identite = dispo ? await icloud.session() : null;
+
+  vue.innerHTML = `
+    <div class="accueil">
+      <div class="emoji gros">🧠</div>
+      <h1>Nuka</h1>
+      <p class="intro">Révise par répétition espacée. Plus de 300 cours gratuits,
+         en sept langues, les mêmes que dans l'application iPhone.</p>
+
+      ${identite ? `
+        <div class="carte connecte">
+          <p><strong>Connecté à iCloud.</strong> Tes cours de l'iPhone apparaissent
+             dans ta bibliothèque.</p>
+          <button class="bouton second" id="deco">Se déconnecter</button>
+        </div>` : dispo ? `
+        <button class="bouton apple" id="connexion">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M11.2 8.5c0-1.5 1.2-2.2 1.3-2.3-.7-1-1.8-1.2-2.2-1.2-1-.1-1.9.6-2.4.6-.5 0-1.2-.6-2-.6-1 0-2 .6-2.5 1.5-1.1 1.9-.3 4.6.8 6.1.5.7 1.1 1.5 1.9 1.5.8 0 1-.5 2-.5s1.2.5 2 .5c.8 0 1.4-.7 1.9-1.4.6-.8.8-1.6.8-1.7 0 0-1.6-.6-1.6-2.5zM9.8 3.6c.4-.5.7-1.2.6-1.9-.6 0-1.4.4-1.8.9-.4.4-.7 1.1-.6 1.8.7.1 1.4-.3 1.8-.8z"/></svg>
+          Se connecter avec Apple
+        </button>
+        <p class="note">Pour retrouver les cours de ton iPhone. Rien n'est envoyé
+           à nos serveurs : le navigateur parle directement à ton iCloud.</p>` : ""}
+
+      <button class="bouton ${identite || !dispo ? "" : "second"}" id="sansCompte">
+        ${identite ? "Continuer" : "Continuer sans compte"}
+      </button>
+      <p class="note">Sans connexion, tu accèdes à tout le catalogue et ta
+         progression reste dans ce navigateur.</p>
+    </div>`;
+
+  const entre = () => {
+    try { localStorage.setItem(CLE_ACCUEIL_VU, "1"); } catch {}
+    location.hash = "#/bibliotheque";
+  };
+  document.getElementById("sansCompte").onclick = () => {
+    suit("accueil_sans_compte");
+    entre();
+  };
+  const bConnexion = document.getElementById("connexion");
+  if (bConnexion) bConnexion.onclick = async () => {
+    bConnexion.disabled = true;
+    bConnexion.textContent = "Connexion…";
+    try {
+      await icloud.connecte();
+      suit("icloud_signed_in");
+      await importeDepuisICloud();
+      entre();
+    } catch (e) {
+      suit("icloud_sign_in_failed", { raison: String(e.message || e).slice(0, 60) });
+      bConnexion.disabled = false;
+      bConnexion.textContent = "Réessayer";
+      vue.insertAdjacentHTML("beforeend",
+        `<p class="note erreurTexte">${echappe(e.message || e)}</p>`);
+    }
+  };
+  const bDeco = document.getElementById("deco");
+  if (bDeco) bDeco.onclick = async () => { await icloud.deconnecte(); ecranAccueil(true); };
+}
+
+/** Verse les cours de l'iPhone dans la bibliothèque locale. */
+async function importeDepuisICloud() {
+  const cours = await icloud.coursDeliCloud();
+  for (const c of cours) await store.ajouteCours(c);
+  suit("icloud_courses_imported", { cours: String(cours.length) });
+  return cours.length;
+}
 
 // ── Utilitaires de rendu ──────────────────────────────────────────────────
 

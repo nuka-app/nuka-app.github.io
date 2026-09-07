@@ -131,3 +131,19 @@ button.lien {
   background: none; border: 0; padding: 0; color: var(--accent);
   font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer;
 }
+
+/* ── Accueil ── */
+.accueil { text-align: center; padding: 32px 0 12px; }
+.accueil h1 { font-size: 34px; margin: 12px 0 8px; }
+.accueil .intro { max-width: 420px; margin: 0 auto 26px; }
+.accueil .bouton { display: block; width: 100%; max-width: 340px; margin: 0 auto; }
+.accueil .note {
+  color: var(--doux); font-size: 13px; max-width: 380px; margin: 10px auto 22px;
+}
+.bouton.apple {
+  background: var(--texte); color: var(--fond);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.carte.connecte { max-width: 380px; margin: 0 auto 18px; text-align: left; }
+.carte.connecte p { margin: 0 0 12px; font-size: 15px; }
+.erreurTexte { color: var(--faux); }
