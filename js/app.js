@@ -1,6 +1,9 @@
 import { manifeste, cours, langues, parMatiere, NOMS_LANGUES, DRAPEAUX } from "./catalogue.js";
 import { store } from "./store.js";
 import { carteNeuve, reviser, noteDepuisTemps, estDue } from "./sm2.js";
+// Mêmes noms d'événements que l'app iOS : c'est ce qui permet de comparer les
+// deux plateformes dans un seul entonnoir, la propriété `source` les séparant.
+import { suit, suitUneFois, consentement } from "./analytics.js";
 
 const vue = document.getElementById("vue");
 const nav = document.getElementById("nav");
@@ -25,7 +28,10 @@ function route() {
     a.classList.toggle("actif", a.getAttribute("href") === `#/${nom}`));
 }
 addEventListener("hashchange", route);
-addEventListener("DOMContentLoaded", route);
+addEventListener("DOMContentLoaded", () => {
+  suit("app_started");
+  route();
+});
 
 // ── Utilitaires de rendu ──────────────────────────────────────────────────
 
@@ -95,6 +101,7 @@ async function ecranCatalogue(langue) {
         <div class="liste">${lignes}</div>`;
       return;
     }
+    suit("catalog_opened", { langue });
     const groupes = parMatiere(m, langue);
     const sections = Object.entries(groupes).map(([matiere, liste]) => `
       <h2>${echappe(matiere.replace(/-/g, " "))}</h2>
@@ -141,9 +148,16 @@ async function ecranCours(id) {
       </div>
       ${fichier.lesson ? `<div class="lecon">${fichier.lesson}</div>` : ""}`;
 
+    suit("course_opened", { cours: id, cartes: String(fichier.cards.length) });
+
     document.getElementById("basculeBiblio").onclick = async () => {
-      if (possede) await store.retireCours(id);
-      else await store.ajouteCours(fichier);
+      if (possede) {
+        await store.retireCours(id);
+        suit("course_deleted", { cours: id });
+      } else {
+        await store.ajouteCours(fichier);
+        suit("catalog_course_downloaded", { cours: id });
+      }
       ecranCours(id);
     };
   } catch (e) { erreur(e); }
@@ -173,7 +187,9 @@ async function ecranRevision(id) {
     const file = (aReviser.length ? aReviser : fichier.cards.map((c, i) =>
       ({ carte: c, index: i, etat: prog[i] || carteNeuve() })));
     melange(file);
-    lanceSession(id, fichier, file.slice(0, 20));
+    const session = file.slice(0, 20);
+    suit("revision_mode_selected", { mode: "qcm", cartes: String(session.length) });
+    lanceSession(id, fichier, session);
   } catch (e) { erreur(e); }
 }
 
@@ -186,9 +202,15 @@ function melange(t) {
 
 function lanceSession(id, fichier, file) {
   let position = 0, justes = 0, debut = 0;
+  surveilleAbandon(id, file, () => position);
 
   const suivant = () => {
-    if (position >= file.length) return resultats(id, fichier, file.length, justes);
+    if (position >= file.length) {
+      suit("session_completed", {
+        cours: id, cartes: String(file.length), justes: String(justes),
+      });
+      return resultats(id, fichier, file.length, justes);
+    }
     const { carte, index, etat } = file[position];
     // Seul le palier difficile est servi, comme dans l'app depuis le 05/09/2026.
     const durs = (carte.distractors && carte.distractors.hard) || [];
@@ -225,6 +247,9 @@ function lanceSession(id, fichier, file) {
 
         const note = noteDepuisTemps(correct, secondes);
         await store.enregistre(id, index, reviser(etat, note, secondes));
+        // La toute première carte révisée, une seule fois par navigateur :
+        // c'est la marche d'activation que l'app iOS mesure aussi.
+        suitUneFois("first_review_done");
       };
     });
   };
@@ -232,6 +257,18 @@ function lanceSession(id, fichier, file) {
 }
 
 function melangeRetour(t) { const c = [...t]; melange(c); return c; }
+
+/** Quitter en cours de session est un signal, pas un non-événement. */
+function surveilleAbandon(id, file, position) {
+  const partir = () => {
+    if (position() < file.length) {
+      suit("session_abandoned", {
+        cours: id, vues: String(position()), total: String(file.length),
+      });
+    }
+  };
+  addEventListener("pagehide", partir, { once: true });
+}
 
 function resultats(id, fichier, total, justes) {
   const pourcent = total ? Math.round((justes / total) * 100) : 0;
@@ -248,3 +285,20 @@ function resultats(id, fichier, total, justes) {
       </div>
     </div>`;
 }
+
+// ── Refus de mesure ───────────────────────────────────────────────────────
+// L'application iOS offre le même retrait ; le site ne peut pas en offrir
+// moins. Le libellé dit l'état COURANT et l'action, pour qu'on sache d'un coup
+// d'œil si l'on est mesuré ou non.
+
+function rafraichitConsentement() {
+  const b = document.getElementById("refusSuivi");
+  if (!b) return;
+  const refuse = consentement.refuse();
+  b.textContent = refuse ? "Mesure désactivée — réactiver" : "Désactiver la mesure";
+  b.onclick = () => {
+    if (refuse) consentement.redonne(); else consentement.retire();
+    rafraichitConsentement();
+  };
+}
+addEventListener("DOMContentLoaded", rafraichitConsentement);
