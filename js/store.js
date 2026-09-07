@@ -1,0 +1,86 @@
+// Persistance locale : IndexedDB.
+//
+// Pourquoi pas le serveur : la progression des utilisateurs iOS vit dans
+// CloudKit, l'iCloud privé de chacun, et n'est pas joignable depuis un
+// navigateur. La remonter au serveur supposerait un système de comptes, une
+// couche de synchronisation dans l'app iOS, et l'exposition de données
+// personnelles aujourd'hui confinées à l'appareil. Cette version garde donc la
+// progression DANS LE NAVIGATEUR : rien ne sort, aucun compte à créer, et
+// l'ajout d'une synchronisation reste possible plus tard sans rien jeter.
+
+const BASE = "nuka";
+const VERSION = 1;
+
+function ouvre() {
+  return new Promise((ok, ko) => {
+    const r = indexedDB.open(BASE, VERSION);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      // Une entrée par carte : clé « idCours#indexCarte ».
+      if (!db.objectStoreNames.contains("progression")) {
+        db.createObjectStore("progression", { keyPath: "cle" });
+      }
+      // Les cours ajoutés à la bibliothèque, avec leur contenu en cache pour
+      // que la révision fonctionne hors ligne une fois le cours ouvert.
+      if (!db.objectStoreNames.contains("cours")) {
+        db.createObjectStore("cours", { keyPath: "id" });
+      }
+    };
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => ko(r.error);
+  });
+}
+
+function transaction(magasin, mode, action) {
+  return ouvre().then(db => new Promise((ok, ko) => {
+    const t = db.transaction(magasin, mode);
+    const res = action(t.objectStore(magasin));
+    t.oncomplete = () => ok(res && res.result !== undefined ? res.result : res);
+    t.onerror = () => ko(t.error);
+  }));
+}
+
+export const store = {
+  cle: (idCours, index) => `${idCours}#${index}`,
+
+  async progression(idCours, index) {
+    const r = await transaction("progression", "readonly",
+      m => m.get(store.cle(idCours, index)));
+    return r ? r.etat : null;
+  },
+
+  async progressionDuCours(idCours) {
+    const tout = await transaction("progression", "readonly", m => m.getAll());
+    const parIndex = {};
+    for (const e of tout || []) {
+      if (e.cle.startsWith(idCours + "#")) {
+        parIndex[Number(e.cle.split("#")[1])] = e.etat;
+      }
+    }
+    return parIndex;
+  },
+
+  enregistre(idCours, index, etat) {
+    return transaction("progression", "readwrite",
+      m => m.put({ cle: store.cle(idCours, index), etat }));
+  },
+
+  ajouteCours(fichier) {
+    return transaction("cours", "readwrite",
+      m => m.put({ id: fichier.id, fichier, ajoute: new Date().toISOString() }));
+  },
+
+  retireCours(id) {
+    return transaction("cours", "readwrite", m => m.delete(id));
+  },
+
+  async bibliotheque() {
+    const tout = await transaction("cours", "readonly", m => m.getAll());
+    return (tout || []).sort((a, b) => b.ajoute.localeCompare(a.ajoute));
+  },
+
+  async possede(id) {
+    const r = await transaction("cours", "readonly", m => m.get(id));
+    return !!r;
+  },
+};
