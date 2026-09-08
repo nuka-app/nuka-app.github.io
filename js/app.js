@@ -92,8 +92,10 @@ async function ecranAccueil(force = false) {
   try {
     identite = await icloud.prepareConnexion();
   } catch (e) {
-    suit("icloud_sign_in_failed", { raison: String(e.message || e).slice(0, 60) });
-    dire(`<span class="erreurTexte">${echappe(e.message || e)}</span>`);
+    const bloqueur = String(e.message) === "BLOQUEUR"
+      || String(e.message).includes("bloqueur");
+    suit("icloud_sign_in_failed", { raison: bloqueur ? "bloqueur" : String(e.message || e).slice(0, 60) });
+    dire(bloqueur ? messageBloqueur() : `<span class="erreurTexte">${echappe(e.message || e)}</span>`);
     return;
   }
 
@@ -116,6 +118,20 @@ async function ecranAccueil(force = false) {
         directement à ton iCloud, rien ne passe par nos serveurs.`);
   // Se résout au retour de la fenêtre Apple, après le clic sur SON bouton.
   icloud.quandConnecte().then(apresConnexion).catch(() => {});
+}
+
+/**
+ * Le message qu'on affiche quand un bloqueur coupe la connexion Apple.
+ *
+ * Nommer la cause et les deux domaines à autoriser vaut infiniment mieux qu'un
+ * échec technique : l'utilisateur peut agir, au lieu de conclure que le site
+ * est cassé.
+ */
+function messageBloqueur() {
+  return `<span class="erreurTexte">Un bloqueur de contenu empêche la connexion
+    Apple.</span><br>Autorise <code>apple-cloudkit.com</code> dans ton bloqueur,
+    ou ouvre cette page dans une fenêtre sans extensions. Le catalogue, lui,
+    fonctionne sans connexion.`;
 }
 
 /** Verse les cours de l'iPhone dans la bibliothèque locale. */

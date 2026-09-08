@@ -157,3 +157,8 @@ button.lien {
 .boutonApple { display: flex; justify-content: center; min-height: 44px; }
 .boutonApple a, .boutonApple div[role="button"] { cursor: pointer; }
 #zoneConnexion { margin-bottom: 4px; }
+
+.accueil code {
+  background: var(--fond2); border: 1px solid var(--bord);
+  border-radius: 6px; padding: 1px 6px; font-size: 12px;
+}

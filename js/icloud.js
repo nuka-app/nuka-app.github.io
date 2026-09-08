@@ -122,7 +122,36 @@ async function prepare() {
 export async function prepareConnexion() {
   if (!JETON) return null;
   const c = await prepare();
-  try { return await c.setUpAuth(); } catch { return null; }
+  try {
+    return await c.setUpAuth();
+  } catch (e) {
+    // NETWORK_ERROR ici ne veut pas dire « pas de réseau » : le SDK est chargé,
+    // mais ses appels vers api.apple-cloudkit.com sont refusés. C'est la
+    // signature d'un bloqueur de contenu, et il faut le nommer — sinon
+    // l'utilisateur cherche une panne chez nous.
+    const code = String(e && (e.ckErrorCode || e.message || e));
+    throw new Error(code.includes("NETWORK")
+      ? "BLOQUEUR"
+      : code);
+  }
+}
+
+/**
+ * Vérifie ce qui empêche la connexion, pour le dire plutôt que de le subir.
+ *
+ * Deux domaines doivent être joignables : celui qui sert le SDK et celui qui
+ * répond aux requêtes. Un bloqueur coupe souvent les deux, et l'échec qui en
+ * résulte ne ressemble à rien de compréhensible.
+ */
+export async function diagnostic() {
+  const test = async (url) => {
+    try { await fetch(url, { mode: "no-cors", cache: "no-store" }); return true; }
+    catch { return false; }
+  };
+  return {
+    sdk: !!window.CloudKit,
+    api: await test("https://api.apple-cloudkit.com/"),
+  };
 }
 
 /** Se résout quand l'utilisateur a terminé sa connexion dans la fenêtre Apple. */
