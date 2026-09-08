@@ -32,7 +32,7 @@ const ZONE = "com.apple.coredata.cloudkit.zone";
 // Il ne donne d'ailleurs accès à rien par lui-même. Il identifie l'application ;
 // c'est la connexion Apple de l'utilisateur qui ouvre SES données, et personne
 // d'autre que lui ne peut les lire.
-export const JETON = "0f46dd4a75637078ca1ea1b2bc2276b742b7a63b3285d897b56b94598fe277ab";
+export const JETON = "ecad388b1371f1bcebdf4205af1626e1cd33910b60dfd7d07e1da40f225b1fe3";
 
 // « production » ou « development ».
 //
@@ -44,7 +44,18 @@ export const JETON = "0f46dd4a75637078ca1ea1b2bc2276b742b7a63b3285d897b56b94598f
 //
 // Les utilisateurs réels sont en production. Un iPhone où l'app a été installée
 // par Xcode, lui, ne se verra qu'en development.
-export const ENVIRONNEMENT = "production";
+export const ENVIRONNEMENT = "development";
+//
+// ⚠️ Pourquoi development et non production, au 08/09/2026.
+//
+// Le jeton est refusé en production — AUTHENTICATION_FAILED sur tous les points
+// d'entrée — alors qu'il est accepté en development, où les réponses sont
+// exactement celles attendues. La cause la plus probable : le schéma CloudKit
+// n'a jamais été déployé vers l'environnement de production.
+//
+// Ce point dépasse largement ce site : si le schéma manque en production, la
+// synchronisation iCloud ne fonctionne pas non plus pour les utilisateurs de
+// l'App Store, en silence. À vérifier dans la console avant de basculer ici.
 
 let conteneur = null;
 
