@@ -151,7 +151,8 @@ async function ecranAccueil(force = false) {
       if (n > 0 && cartes === 0) {
         const inv = await icloud.inventaire();
         dire(`${n} cours récupéré${n > 1 ? "s" : ""}, mais aucune carte.<br>
-              <span class="releve">${echappe(JSON.stringify(inv.types))}</span>`);
+              <span class="releve">${echappe(JSON.stringify(inv.echantillon))}</span><br>
+              <a href="#/diagnostic">Voir le diagnostic complet</a>`);
         suit("icloud_cartes_absentes", { cours: String(n) });
         return;
       }
@@ -220,6 +221,8 @@ async function ecranDiagnostic() {
       <p class="intro">Environnement <code>${echappe(inv.environnement)}</code>,
          zone <code>${echappe(inv.zone)}</code>.</p>
       <button class="bouton" id="copier">Copier le relevé</button>
+      <h2>Identifiants — ce qui relie une carte à son cours</h2>
+      <pre class="releveBrut">${echappe(JSON.stringify(inv.echantillon, null, 2))}</pre>
       ${lignes || "<p class='intro'>Aucun enregistrement dans cette zone.</p>"}`;
 
     document.getElementById("copier").onclick = async () => {

@@ -182,10 +182,20 @@ export async function coursDeliCloud() {
   // non une référence CloudKit. Vérifié sur les données réelles : c'est ainsi
   // que le miroir Core Data encode une relation à un. Chercher un objet muni
   // d'un `recordName`, comme je le faisais, ne pouvait rien trouver.
-  const nomsDeCours = new Set(cours.map(c => c.recordName));
+  // Un cours se désigne par DEUX identifiants, et rien ne dit lequel la carte
+  // emploie : le nom d'enregistrement CloudKit, et le `CD_id` que Core Data a
+  // posé. On indexe les deux vers le même cours, ce qui rend le rattachement
+  // indifférent au choix du miroir.
+  const versCours = new Map();
+  for (const c of cours) {
+    versCours.set(c.recordName, c.recordName);
+    const id = texte(champ(c, "CD_id"));
+    if (id) versCours.set(id, c.recordName);
+  }
+
   const parCours = {};
   for (const f of cartes) {
-    const cle = lienVersCours(f, nomsDeCours);
+    const cle = lienVersCours(f, versCours);
     if (cle) (parCours[cle] = parCours[cle] || []).push(f);
   }
 
@@ -215,17 +225,26 @@ export async function coursDeliCloud() {
   });
 }
 
-/** Le cours auquel appartient une carte, quelle que soit la forme du champ. */
-function lienVersCours(carte, nomsDeCours) {
-  const v = champ(carte, "CD_course");
-  if (typeof v === "string" && v) return v;
-  if (v && typeof v === "object" && v.recordName) return v.recordName;
-  // Repli : si le nom du champ changeait, on reconnaîtrait quand même le lien
-  // à sa valeur, puisqu'elle désigne un cours existant.
+/**
+ * Le cours auquel appartient une carte.
+ *
+ * `versCours` associe TOUT identifiant connu d'un cours — nom d'enregistrement
+ * CloudKit comme `CD_id` — à son nom d'enregistrement. On n'a donc pas besoin
+ * de savoir lequel des deux le miroir a inscrit dans la carte.
+ *
+ * Le repli sur les autres champs vaut son coût : il reconnaît le lien à sa
+ * VALEUR, et survivrait donc à un renommage du champ côté Swift.
+ */
+function lienVersCours(carte, versCours) {
+  const direct = champ(carte, "CD_course");
+  const cle = typeof direct === "string" ? direct
+            : (direct && direct.recordName) || null;
+  if (cle && versCours.has(cle)) return versCours.get(cle);
+
   for (const nom of Object.keys(carte.fields || {})) {
-    const val = carte.fields[nom].value;
-    if (typeof val === "string" && nomsDeCours.has(val)) return val;
-    if (val && val.recordName && nomsDeCours.has(val.recordName)) return val.recordName;
+    const v = carte.fields[nom].value;
+    const candidat = typeof v === "string" ? v : (v && v.recordName);
+    if (candidat && versCours.has(candidat)) return versCours.get(candidat);
   }
   return null;
 }
@@ -320,7 +339,21 @@ export async function inventaire() {
         })) : {},
     };
   }
-  return { environnement: ENVIRONNEMENT, zone: ZONE, types: resume };
+  // Les valeurs des identifiants, seules capables de dire ce qui relie une
+  // carte à son cours. Aucun contenu de carte n'est exposé : uniquement des
+  // identifiants.
+  const echantillon = {
+    cours: (parType["CD_Course"] || []).slice(0, 4).map(c => ({
+      recordName: c.recordName, CD_id: (c.fields.CD_id || {}).value,
+      titre: (c.fields.CD_title || {}).value,
+    })),
+    carte: (parType["CD_Flashcard"] || []).slice(0, 2).map(f => ({
+      recordName: f.recordName,
+      CD_course: (f.fields.CD_course || {}).value,
+      CD_id: (f.fields.CD_id || {}).value,
+    })),
+  };
+  return { environnement: ENVIRONNEMENT, zone: ZONE, types: resume, echantillon };
 }
 
 const champ = (r, nom) => (r.fields && r.fields[nom] ? r.fields[nom].value : null);
