@@ -21,10 +21,30 @@
 const CONTENEUR = "iCloud.simonneau.D-and-R-Learn";
 const ZONE = "com.apple.coredata.cloudkit.zone";
 
-// Jeton d'API web, à créer dans le tableau de bord CloudKit et à autoriser
-// pour l'origine du site. Tant qu'il est vide, la connexion iCloud est
-// simplement absente de l'interface — le site fonctionne sans.
-export const JETON = "";
+// Jeton d'API web CloudKit.
+//
+// Il est PUBLIC par conception, comme la clé de projet PostHog : CloudKit JS
+// s'exécute dans le navigateur, donc tout jeton qu'il utilise est lisible par
+// qui ouvre les sources. Ce qui le protège n'est pas le secret mais la liste
+// des ORIGINES AUTORISÉES, déclarée dans le tableau de bord : un jeton copié
+// depuis ce dépôt ne fonctionnera depuis aucun autre site.
+//
+// Il ne donne d'ailleurs accès à rien par lui-même. Il identifie l'application ;
+// c'est la connexion Apple de l'utilisateur qui ouvre SES données, et personne
+// d'autre que lui ne peut les lire.
+export const JETON = "0f46dd4a75637078ca1ea1b2bc2276b742b7a63b3285d897b56b94598fe277ab";
+
+// « production » ou « development ».
+//
+// Le choix n'est pas cosmétique : ce sont DEUX BASES SÉPARÉES. Une app lancée
+// depuis Xcode écrit dans development ; une app venue de TestFlight ou de l'App
+// Store écrit dans production. Chercher au mauvais endroit donne une
+// bibliothèque vide sans le moindre message d'erreur — le symptôme le plus
+// trompeur possible, puisque tout paraît fonctionner.
+//
+// Les utilisateurs réels sont en production. Un iPhone où l'app a été installée
+// par Xcode, lui, ne se verra qu'en development.
+export const ENVIRONNEMENT = "production";
 
 let conteneur = null;
 
@@ -49,7 +69,7 @@ async function prepare() {
     containers: [{
       containerIdentifier: CONTENEUR,
       apiTokenAuth: { apiToken: JETON, persist: true },
-      environment: "production",
+      environment: ENVIRONNEMENT,
     }],
   });
   conteneur = window.CloudKit.getDefaultContainer();
