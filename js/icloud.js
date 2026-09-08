@@ -21,41 +21,35 @@
 const CONTENEUR = "iCloud.simonneau.D-and-R-Learn";
 const ZONE = "com.apple.coredata.cloudkit.zone";
 
-// Jeton d'API web CloudKit.
+// Jetons d'API web CloudKit — UN PAR ENVIRONNEMENT.
 //
-// Il est PUBLIC par conception, comme la clé de projet PostHog : CloudKit JS
-// s'exécute dans le navigateur, donc tout jeton qu'il utilise est lisible par
-// qui ouvre les sources. Ce qui le protège n'est pas le secret mais la liste
-// des ORIGINES AUTORISÉES, déclarée dans le tableau de bord : un jeton copié
-// depuis ce dépôt ne fonctionnera depuis aucun autre site.
+// C'est le point qui m'a fait conclure de travers : un jeton créé pour
+// development est refusé en production, et réciproquement, avec le même
+// AUTHENTICATION_FAILED que si le conteneur n'existait pas. Le symptôme
+// ressemble à un schéma jamais déployé alors qu'il ne s'agit que d'une portée.
 //
-// Il ne donne d'ailleurs accès à rien par lui-même. Il identifie l'application ;
-// c'est la connexion Apple de l'utilisateur qui ouvre SES données, et personne
-// d'autre que lui ne peut les lire.
-export const JETON = "ecad388b1371f1bcebdf4205af1626e1cd33910b60dfd7d07e1da40f225b1fe3";
+// Ils sont PUBLICS par conception, comme la clé de projet PostHog : CloudKit JS
+// s'exécute dans le navigateur, donc tout jeton qu'il emploie est lisible par
+// qui ouvre les sources. Ils n'ouvrent d'ailleurs rien par eux-mêmes — ils
+// identifient l'application, et c'est la connexion Apple de l'utilisateur qui
+// donne accès à SES données, à lui seul.
+const JETONS = {
+  production:  "e965337bc0ecca6b0aa217d65415d1ea830036585ff5cdaf6fac5a48d6bd2ce8",
+  development: "ecad388b1371f1bcebdf4205af1626e1cd33910b60dfd7d07e1da40f225b1fe3",
+};
 
-// « production » ou « development ».
+// Production par défaut : c'est là que vivent les données des utilisateurs de
+// l'App Store et de TestFlight.
 //
-// Le choix n'est pas cosmétique : ce sont DEUX BASES SÉPARÉES. Une app lancée
-// depuis Xcode écrit dans development ; une app venue de TestFlight ou de l'App
-// Store écrit dans production. Chercher au mauvais endroit donne une
-// bibliothèque vide sans le moindre message d'erreur — le symptôme le plus
-// trompeur possible, puisque tout paraît fonctionner.
-//
-// Les utilisateurs réels sont en production. Un iPhone où l'app a été installée
-// par Xcode, lui, ne se verra qu'en development.
-export const ENVIRONNEMENT = "development";
-//
-// ⚠️ Pourquoi development et non production, au 08/09/2026.
-//
-// Le jeton est refusé en production — AUTHENTICATION_FAILED sur tous les points
-// d'entrée — alors qu'il est accepté en development, où les réponses sont
-// exactement celles attendues. La cause la plus probable : le schéma CloudKit
-// n'a jamais été déployé vers l'environnement de production.
-//
-// Ce point dépasse largement ce site : si le schéma manque en production, la
-// synchronisation iCloud ne fonctionne pas non plus pour les utilisateurs de
-// l'App Store, en silence. À vérifier dans la console avant de basculer ici.
+// Development s'obtient par `?env=development` dans l'adresse. Ce n'est pas un
+// gadget : une app installée depuis Xcode écrit dans development, si bien qu'un
+// iPhone de développement reste INVISIBLE depuis la production, sans erreur ni
+// message. Sans cette bascule, on cherche longtemps une panne qui n'existe pas.
+export const ENVIRONNEMENT =
+  new URLSearchParams(location.search).get("env") === "development"
+    ? "development" : "production";
+
+export const JETON = JETONS[ENVIRONNEMENT];
 
 let conteneur = null;
 
