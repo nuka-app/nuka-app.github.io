@@ -5,6 +5,7 @@ import { carteNeuve, reviser, noteDepuisTemps, estDue } from "./sm2.js";
 // deux plateformes dans un seul entonnoir, la propriété `source` les séparant.
 import { suit, suitUneFois, consentement } from "./analytics.js";
 import * as icloud from "./icloud.js";
+import * as vues from "./vues.js";
 
 const vue = document.getElementById("vue");
 const nav = document.getElementById("nav");
@@ -16,14 +17,21 @@ const nav = document.getElementById("nav");
 const CLE_ACCUEIL_VU = "nuka.accueil.vu";
 
 const routes = {
-  "":            () => ecranAccueil(),
-  "accueil":     () => ecranAccueil(true),
-  "bibliotheque": () => ecranBibliotheque(),
-  "catalogue":   (p) => ecranCatalogue(p[0]),
-  "cours":       (p) => ecranCours(p.join("/")),
-  "reviser":     (p) => ecranRevision(p.join("/")),
-  "diagnostic":  () => ecranDiagnostic(),
+  "":             () => ecranAccueil(),
+  "accueil":      () => vues.ecranAccueilCours(vue, etatUI),
+  "connexion":    () => ecranAccueil(true),
+  "catalogue":    (p) => vues.ecranCatalogue(vue, p[0]).catch(erreur),
+  "reviser":      (p) => ecranRevision(p.join("/")),
+  "reviser-tout": () => ecranRevisionGlobale(),
+  "revision":     () => vues.ecranReviser(vue).catch(erreur),
+  "stats":        () => vues.ecranStats(vue).catch(erreur),
+  "profil":       () => ecranProfil(),
+  "cours":        (p) => ecranCours(p.join("/")),
+  "diagnostic":   () => ecranDiagnostic(),
 };
+
+/** Ce que l'interface retient d'une vue à l'autre — la recherche, par exemple. */
+const etatUI = { filtre: "" };
 
 function route() {
   const brut = location.hash.replace(/^#\/?/, "");
@@ -33,8 +41,8 @@ function route() {
   // qu'il est bien dans la bibliothèque, deux lignes plus haut.
   const [nom, ...reste] = brut.split("/").map(decodeUnPeu);
   (routes[nom] || routes[""])(reste);
-  nav.querySelectorAll("a").forEach(a =>
-    a.classList.toggle("actif", a.getAttribute("href") === `#/${nom}`));
+  document.querySelectorAll("#onglets a").forEach(a =>
+    a.classList.toggle("actif", a.dataset.onglet === nom));
 }
 /** Décode sans jamais lever : un identifiant mal formé ne doit pas casser la page. */
 function decodeUnPeu(s) {
@@ -353,40 +361,66 @@ async function ecranCours(id) {
     const fichier = await chargeCours(id);
     const possede = await store.possede(id);
     const prog = await store.progressionDuCours(id);
-    const dues = fichier.cards.filter((_, i) => estDue(prog[i])).length;
-
-    vue.innerHTML = `
-      <a class="retour" href="#/catalogue">← Catalogue</a>
-      <div class="entete">
-        <div class="emoji gros">${echappe(fichier.emoji || "📚")}</div>
-        <div>
-          <h1>${echappe(fichier.title)}</h1>
-          <p class="meta">${fichier.cards.length} cartes${fichier.level ? " · " + echappe(fichier.level) : ""}</p>
-        </div>
-      </div>
-      ${fichier.courseDescription ? `<p class="intro">${echappe(fichier.courseDescription)}</p>` : ""}
-      <div class="actions">
-        <a class="bouton" href="#/reviser/${encodeURIComponent(id)}">
-          ${dues ? `Réviser ${dues} carte${dues > 1 ? "s" : ""}` : "Revoir le cours"}
-        </a>
-        <button id="basculeBiblio" class="bouton second">
-          ${possede ? "Retirer de ma bibliothèque" : "Ajouter à ma bibliothèque"}
-        </button>
-      </div>
-      ${fichier.lesson ? `<div class="lecon">${fichier.lesson}</div>` : ""}`;
-
     suit("course_opened", { cours: id, cartes: String(fichier.cards.length) });
+
+    await vues.ecranCours(vue, id, fichier, prog, possede);
 
     document.getElementById("basculeBiblio").onclick = async () => {
       if (possede) {
         await store.retireCours(id);
         suit("course_deleted", { cours: id });
+        location.hash = "#/accueil";
       } else {
         await store.ajouteCours(fichier);
         suit("catalog_course_downloaded", { cours: id });
+        ecranCours(id);
       }
-      ecranCours(id);
     };
+  } catch (e) { erreur(e); }
+}
+
+async function ecranProfil() {
+  let identite = null;
+  try { identite = icloud.configure() ? await icloud.prepareConnexion() : null; } catch {}
+  vues.ecranProfil(vue, {
+    identite,
+    environnement: icloud.ENVIRONNEMENT,
+    mesureRefusee: consentement.refuse(),
+    surDeconnexion: async () => {
+      await icloud.deconnecte();
+      suit("icloud_signed_out");
+      location.hash = "#/connexion";
+    },
+    surRefusMesure: () => {
+      if (consentement.refuse()) consentement.redonne(); else consentement.retire();
+      ecranProfil();
+    },
+  });
+}
+
+/**
+ * Révision de tout ce qui est dû, tous cours confondus.
+ *
+ * C'est l'entrée la plus utilisée sur le téléphone : on ne choisit pas un
+ * cours, on révise ce que la mémoire réclame aujourd'hui.
+ */
+async function ecranRevisionGlobale() {
+  attente("Préparation de la séance…");
+  try {
+    const liste = await vues.bibliothequeEnrichie();
+    const file = [];
+    for (const { fichier } of liste) {
+      const prog = await store.progressionDuCours(fichier.id);
+      fichier.cards.forEach((carte, index) => {
+        const etat = prog[index] || carteNeuve();
+        if (estDue(etat)) file.push({ carte, index, etat, idCours: fichier.id, fichier });
+      });
+    }
+    if (!file.length) return vues.ecranReviser(vue);
+    melange(file);
+    const session = file.slice(0, 20);
+    suit("due_mixed_started", { cartes: String(session.length) });
+    lanceSession(null, null, session);
   } catch (e) { erreur(e); }
 }
 
@@ -418,7 +452,7 @@ async function ecranRevision(id) {
     const file = (aReviser.length ? aReviser : fichier.cards.map((c, i) =>
       ({ carte: c, index: i, etat: prog[i] || carteNeuve() })));
     melange(file);
-    const session = file.slice(0, 20);
+    const session = file.slice(0, 20).map(x => ({ ...x, idCours: id, fichier }));
     suit("revision_mode_selected", { mode: "qcm", cartes: String(session.length) });
     lanceSession(id, fichier, session);
   } catch (e) { erreur(e); }
@@ -438,11 +472,13 @@ function lanceSession(id, fichier, file) {
   const suivant = () => {
     if (position >= file.length) {
       suit("session_completed", {
-        cours: id, cartes: String(file.length), justes: String(justes),
+        cours: id || "melange", cartes: String(file.length), justes: String(justes),
       });
       return resultats(id, fichier, file.length, justes);
     }
-    const { carte, index, etat } = file[position];
+    // Chaque entrée porte SON cours : une séance globale mélange les cours,
+    // et enregistrer la progression au mauvais endroit la perdrait.
+    const { carte, index, etat, idCours } = file[position];
     // Seul le palier difficile est servi, comme dans l'app depuis le 05/09/2026.
     const durs = (carte.distractors && carte.distractors.hard) || [];
     const options = melangeRetour([carte.verso, ...durs.slice(0, 3)]);
@@ -477,7 +513,7 @@ function lanceSession(id, fichier, file) {
         document.getElementById("suite").onclick = () => { position += 1; suivant(); };
 
         const note = noteDepuisTemps(correct, secondes);
-        await store.enregistre(id, index, reviser(etat, note, secondes));
+        await store.enregistre(idCours, index, reviser(etat, note, secondes));
         // La toute première carte révisée, une seule fois par navigateur :
         // c'est la marche d'activation que l'app iOS mesure aussi.
         suitUneFois("first_review_done");
@@ -494,7 +530,7 @@ function surveilleAbandon(id, file, position) {
   const partir = () => {
     if (position() < file.length) {
       suit("session_abandoned", {
-        cours: id, vues: String(position()), total: String(file.length),
+        cours: id || "melange", vues: String(position()), total: String(file.length),
       });
     }
   };
@@ -511,8 +547,8 @@ function resultats(id, fichier, total, justes) {
       <p class="intro">Les cartes ratées reviendront dès aujourd'hui,
          les autres à leur échéance.</p>
       <div class="actions">
-        <a class="bouton" href="#/cours/${encodeURIComponent(id)}">Terminé</a>
-        <a class="bouton second" href="#/reviser/${encodeURIComponent(id)}">Recommencer</a>
+        <a class="bouton" href="${id ? "#/cours/" + encodeURIComponent(id) : "#/accueil"}">Terminé</a>
+        <a class="bouton second" href="${id ? "#/reviser/" + encodeURIComponent(id) : "#/reviser-tout"}">Recommencer</a>
       </div>
     </div>`;
 }

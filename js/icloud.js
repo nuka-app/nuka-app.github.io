@@ -277,6 +277,36 @@ function melange(t) {
   }
 }
 
+/**
+ * Les statistiques du compte, telles que l'app les tient.
+ *
+ * Elles ne se recalculent pas côté web : série, XP et niveau résultent de
+ * règles qui vivent dans l'app — gels de série, barème d'expérience, paliers.
+ * Les recalculer produirait deux vérités divergentes ; on lit celle qui fait foi.
+ */
+export async function statistiques() {
+  const c = await prepare();
+  const parType = await parcourtZone(c.privateCloudDatabase);
+  const enr = (parType["CD_UserStats"] || [])[0];
+  if (!enr) return null;
+  const n = (nom) => {
+    const v = champ(enr, nom);
+    return typeof v === "number" ? v : 0;
+  };
+  return {
+    serie: n("CD_currentStreak"),
+    meilleureSerie: n("CD_longestStreak"),
+    xp: n("CD_totalXP"),
+    niveau: n("CD_currentLevel"),
+    cartesRevisees: n("CD_totalCardsReviewed"),
+    bonnesReponses: n("CD_totalCorrectAnswers"),
+    cartesCreees: n("CD_totalCardsCreated"),
+    coursCrees: n("CD_coursesCreated"),
+    tempsEtudeSecondes: n("CD_totalStudyTimeSeconds"),
+    objectifQuotidien: n("CD_dailyGoalCards"),
+  };
+}
+
 /** L'état SM-2 tel que le téléphone l'a laissé. */
 function progressionDepuis(f) {
   const n = (nom) => {

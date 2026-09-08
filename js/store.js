@@ -79,6 +79,16 @@ export const store = {
     return (tout || []).sort((a, b) => b.ajoute.localeCompare(a.ajoute));
   },
 
+  /** Les statistiques venues d'iCloud, conservées entre deux visites. */
+  memoriseStats(stats) {
+    try { localStorage.setItem("nuka.stats", JSON.stringify(stats)); } catch {}
+  },
+
+  stats() {
+    try { return JSON.parse(localStorage.getItem("nuka.stats") || "null"); }
+    catch { return null; }
+  },
+
   async possede(id) {
     const r = await transaction("cours", "readonly", m => m.get(id));
     return !!r;

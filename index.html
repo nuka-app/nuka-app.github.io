@@ -11,11 +11,14 @@
 <body>
   <header>
     <a class="marque" href="#/">Nuka</a>
-    <nav id="nav">
-      <a href="#/bibliotheque">Ma bibliothèque</a>
-      <a href="#/catalogue">Catalogue</a>
-      <span id="compte" hidden></span>
+    <nav id="onglets">
+      <a href="#/accueil"   data-onglet="accueil"><span>🏠</span>Accueil</a>
+      <a href="#/catalogue" data-onglet="catalogue"><span>📚</span>Catalogue</a>
+      <a href="#/revision"  data-onglet="revision"><span>🧠</span>Réviser</a>
+      <a href="#/stats"     data-onglet="stats"><span>📊</span>Statistiques</a>
+      <a href="#/profil"    data-onglet="profil"><span>👤</span>Profil</a>
     </nav>
+    <span id="compte" hidden></span>
   </header>
 
   <main id="vue"><div class="attente"><div class="rond"></div><p>Chargement…</p></div></main>

@@ -186,3 +186,76 @@ table.diag td:last-child { color: var(--doux); }
   font-size: 11px; background: var(--fond2); color: var(--texte);
   border: 1px solid var(--bord); border-radius: 10px; padding: 10px;
 }
+
+/* ══ Onglets ══════════════════════════════════════════════════════════════
+   En haut plutôt qu'en bas : sur un écran d'ordinateur, une barre basse
+   flotte loin du contenu. Le défilement horizontal évite l'écrasement des
+   libellés sur un téléphone, où cinq onglets ne tiennent pas de front. */
+#onglets {
+  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+#onglets::-webkit-scrollbar { display: none; }
+#onglets a {
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  color: var(--doux); text-decoration: none; font-size: 14px; font-weight: 600;
+  padding: 8px 13px; border-radius: 999px;
+}
+#onglets a span { font-size: 15px; }
+#onglets a:hover { color: var(--texte); }
+#onglets a.actif { color: var(--texte); background: var(--fond2); }
+
+/* ══ Accueil ══ */
+.carte.progression { display: flex; gap: 8px; margin-bottom: 12px; }
+.carte.progression .bloc { flex: 1; text-align: center; }
+.carte.progression .valeur { display: block; font-size: 22px; font-weight: 800; }
+.carte.progression .etiquette { font-size: 12px; color: var(--doux); }
+
+a.carte.aReviser {
+  justify-content: space-between; margin-bottom: 12px;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--fond2));
+}
+a.carte.aReviser h3 { margin: 0; }
+.carte.aReviser .fleche { font-size: 20px; color: var(--accent); }
+.carte.ajour { margin-bottom: 12px; }
+.carte.ajour p { margin: 0; color: var(--doux); }
+
+.barreRecherche { margin: 4px 0 12px; }
+.barreRecherche input {
+  width: 100%; padding: 12px 14px; font: inherit; font-size: 15px;
+  background: var(--fond2); color: var(--texte);
+  border: 1px solid var(--bord); border-radius: 12px;
+}
+
+/* ══ Liste des cartes ══ */
+.cartes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 26px; }
+.carteApercu { padding: 0; cursor: pointer; }
+.carteApercu .haut {
+  display: flex; align-items: center; gap: 12px; padding: 13px 15px;
+}
+.carteApercu .num {
+  color: var(--doux); font-size: 12px; font-variant-numeric: tabular-nums;
+  min-width: 22px;
+}
+.carteApercu .recto { flex: 1; font-size: 15px; }
+.carteApercu .echeance { font-size: 12px; color: var(--doux); white-space: nowrap; }
+.carteApercu .echeance.due { color: var(--accent); font-weight: 700; }
+.carteApercu .bas {
+  display: none; padding: 0 15px 14px 49px; border-top: 1px solid var(--bord);
+}
+.carteApercu.ouverte .bas { display: block; padding-top: 12px; }
+.carteApercu .verso { margin: 0 0 6px; font-size: 15px; }
+
+/* ══ Statistiques ══ */
+.grilleStats {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px; margin-bottom: 22px;
+}
+.statBloc { text-align: center; }
+.statBloc .valeur { display: block; font-size: 24px; font-weight: 800; }
+.statBloc .etiquette { font-size: 12px; color: var(--doux); }
+
+/* ══ Profil ══ */
+main .carte p { margin: 0 0 10px; font-size: 15px; }
+main .carte p:last-of-type { margin-bottom: 12px; }
