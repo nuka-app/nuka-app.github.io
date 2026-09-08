@@ -176,10 +176,15 @@ export async function coursDeliCloud() {
   const cours = parType["CD_Course"] || [];
   const cartes = parType["CD_Flashcard"] || [];
 
-  // Les cartes pointent vers leur cours par une référence CloudKit.
+  // Rattachement des cartes à leur cours.
+  //
+  // Le nom du champ de relation n'est pas garanti : le miroir Core Data le
+  // dérive du modèle, et un renommage côté Swift le changerait ici. Plutôt que
+  // de parier sur « CD_course », on cherche parmi les champs de la carte
+  // celui qui EST une référence — il n'y en a qu'une.
   const parCours = {};
   for (const f of cartes) {
-    const ref = champ(f, "CD_course");
+    const ref = premiereReference(f);
     const cle = ref && ref.recordName;
     if (cle) (parCours[cle] = parCours[cle] || []).push(f);
   }
@@ -191,12 +196,56 @@ export async function coursDeliCloud() {
     courseDescription: champ(co, "CD_courseDescription") || "",
     origine: "icloud",
     cards: (parCours[co.recordName] || []).map(f => ({
-      recto: champ(f, "CD_recto") || "",
-      verso: champ(f, "CD_verso") || "",
-      explanation: champ(f, "CD_explanation") || "",
+      recto: texte(champ(f, "CD_recto")),
+      verso: texte(champ(f, "CD_verso")),
+      explanation: texte(champ(f, "CD_explanation")),
       distractors: distracteurs(champ(f, "CD_cachedDistractors")),
     })).filter(x => x.recto && x.verso),
-  })).filter(c => c.cards.length);
+  }));
+  // ⚠️ AUCUN filtre sur les cours vides ici.
+  //
+  // La version précédente écartait tout cours sans carte rattachée. Si le
+  // rattachement échoue — un nom de champ qui a changé, par exemple — ce
+  // filtre fait disparaître LA TOTALITÉ des cours, et l'écran affiche une
+  // bibliothèque vide sans le moindre indice. Mieux vaut un cours visible mais
+  // vide, qui dit où chercher.
+}
+
+/** La première valeur de champ qui est une référence CloudKit. */
+function premiereReference(enr) {
+  for (const nom of Object.keys(enr.fields || {})) {
+    const v = enr.fields[nom].value;
+    if (v && typeof v === "object" && v.recordName) return v;
+  }
+  return null;
+}
+
+/** Le texte d'un champ, qu'il soit chaîne brute ou valeur enveloppée. */
+function texte(v) {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object" && typeof v.value === "string") return v.value;
+  return String(v);
+}
+
+/**
+ * Ce que la zone contient réellement, pour le dire quand rien ne s'affiche.
+ *
+ * Une bibliothèque vide a plusieurs causes possibles — mauvais environnement,
+ * zone différente, champs renommés — et elles se ressemblent toutes à l'écran.
+ * Ce relevé les sépare.
+ */
+export async function inventaire() {
+  const c = await prepare();
+  const parType = await parcourtZone(c.privateCloudDatabase);
+  const resume = {};
+  for (const [type, liste] of Object.entries(parType)) {
+    resume[type] = {
+      nombre: liste.length,
+      champs: liste[0] ? Object.keys(liste[0].fields || {}).slice(0, 24) : [],
+    };
+  }
+  return { environnement: ENVIRONNEMENT, zone: ZONE, types: resume };
 }
 
 const champ = (r, nom) => (r.fields && r.fields[nom] ? r.fields[nom].value : null);

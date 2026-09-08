@@ -162,3 +162,17 @@ button.lien {
   background: var(--fond2); border: 1px solid var(--bord);
   border-radius: 6px; padding: 1px 6px; font-size: 12px;
 }
+
+/* ── Pastille de compte ── */
+.pastilleCompte {
+  background: var(--fond2); color: var(--texte); border: 1px solid var(--bord);
+  border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.pastilleCompte .point {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--juste);
+}
+.releve {
+  display: inline-block; font-family: ui-monospace, monospace; font-size: 11px;
+  color: var(--doux); word-break: break-all; margin: 6px 0;
+}

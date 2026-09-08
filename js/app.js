@@ -32,10 +32,39 @@ function route() {
     a.classList.toggle("actif", a.getAttribute("href") === `#/${nom}`));
 }
 addEventListener("hashchange", route);
+addEventListener("hashchange", rafraichitCompte);
 addEventListener("DOMContentLoaded", () => {
   suit("app_started");
   route();
+  rafraichitCompte();
 });
+
+// ── Pastille de compte ────────────────────────────────────────────────────
+//
+// Sans repère visible, on ne sait pas si l'on est connecté — et une
+// bibliothèque vide devient indéchiffrable : est-ce la connexion qui a échoué,
+// ou n'y a-t-il rien à montrer ?
+
+async function rafraichitCompte() {
+  const zone = document.getElementById("compte");
+  if (!zone || !icloud.configure()) return;
+  let identite = null;
+  try { identite = await icloud.prepareConnexion(); } catch { /* bloqueur, déjà signalé */ }
+  if (!identite) { zone.hidden = true; return; }
+
+  const nom = (identite.nameComponents && identite.nameComponents.givenName)
+    || (identite.emailAddress || "").split("@")[0] || "iCloud";
+  zone.hidden = false;
+  zone.innerHTML = `<button class="pastilleCompte" title="Connecté à iCloud">
+      <span class="point"></span>${echappe(nom)}</button>`;
+  zone.querySelector("button").onclick = async () => {
+    if (!confirm("Se déconnecter d'iCloud ? Les cours importés restent dans ce navigateur.")) return;
+    await icloud.deconnecte();
+    suit("icloud_signed_out");
+    location.hash = "#/accueil";
+    rafraichitCompte();
+  };
+}
 
 // ── Accueil : connexion iCloud ────────────────────────────────────────────
 //
@@ -104,6 +133,19 @@ async function ecranAccueil(force = false) {
     try {
       const n = await importeDepuisICloud();
       suit("icloud_signed_in");
+      rafraichitCompte();
+      if (n === 0) {
+        // Zéro cours n'est pas forcément une bibliothèque vide : ce peut être
+        // le mauvais environnement, une autre zone, ou des champs renommés. On
+        // montre ce que la zone contient vraiment plutôt que de laisser
+        // conclure à une panne.
+        const inv = await icloud.inventaire();
+        dire(`Connecté, mais aucun cours trouvé.<br>
+              <span class="releve">${echappe(JSON.stringify(inv.types))}</span><br>
+              Environnement : <code>${inv.environnement}</code>`);
+        suit("icloud_vide", { environnement: inv.environnement });
+        return;
+      }
       dire(`${n} cours récupéré${n > 1 ? "s" : ""}.`);
       entre();
     } catch (e) {
