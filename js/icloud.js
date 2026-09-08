@@ -81,18 +81,28 @@ async function prepare() {
   return conteneur;
 }
 
-/** L'utilisateur déjà connecté, ou null. N'ouvre aucune fenêtre. */
-export async function session() {
+/**
+ * Prépare la connexion et renvoie l'identité si elle existe déjà.
+ *
+ * ⚠️ CloudKit JS n'expose AUCUNE fonction pour ouvrir la fenêtre de connexion.
+ * `setUpAuth()` injecte son propre bouton dans l'élément `#apple-sign-in-button`
+ * et c'est le clic sur CE bouton qui ouvre la fenêtre Apple. Un bouton maison
+ * ne peut pas déclencher la connexion : il attendrait indéfiniment un signal
+ * qui ne viendra jamais — ce que faisait la version précédente, d'où un
+ * « Connexion… » qui ne finissait pas.
+ *
+ * L'élément d'accueil doit donc exister dans la page AVANT cet appel.
+ */
+export async function prepareConnexion() {
   if (!JETON) return null;
   const c = await prepare();
   try { return await c.setUpAuth(); } catch { return null; }
 }
 
-/** Ouvre la fenêtre de connexion Apple et renvoie l'identité obtenue. */
-export async function connecte() {
+/** Se résout quand l'utilisateur a terminé sa connexion dans la fenêtre Apple. */
+export async function quandConnecte() {
   const c = await prepare();
-  const identite = await c.setUpAuth();
-  return identite || c.whenUserSignsIn();
+  return c.whenUserSignsIn();
 }
 
 export async function deconnecte() {

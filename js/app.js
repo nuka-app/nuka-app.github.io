@@ -51,8 +51,10 @@ async function ecranAccueil(force = false) {
   if (vu && !force) return ecranBibliotheque();
 
   const dispo = icloud.configure();
-  const identite = dispo ? await icloud.session() : null;
 
+  // L'élément #apple-sign-in-button doit EXISTER avant setUpAuth() : c'est
+  // CloudKit JS qui y injecte son bouton, et lui seul sait ouvrir la fenêtre
+  // de connexion Apple.
   vue.innerHTML = `
     <div class="accueil">
       <div class="emoji gros">🧠</div>
@@ -60,53 +62,60 @@ async function ecranAccueil(force = false) {
       <p class="intro">Révise par répétition espacée. Plus de 300 cours gratuits,
          en sept langues, les mêmes que dans l'application iPhone.</p>
 
-      ${identite ? `
-        <div class="carte connecte">
-          <p><strong>Connecté à iCloud.</strong> Tes cours de l'iPhone sont dans
-             ta bibliothèque.</p>
-          <button class="bouton" id="entrer">Continuer</button>
-          <button class="bouton second" id="deco">Se déconnecter</button>
-        </div>` : `
-        <button class="bouton apple" id="connexion" ${dispo ? "" : "disabled"}>
-          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M11.2 8.5c0-1.5 1.2-2.2 1.3-2.3-.7-1-1.8-1.2-2.2-1.2-1-.1-1.9.6-2.4.6-.5 0-1.2-.6-2-.6-1 0-2 .6-2.5 1.5-1.1 1.9-.3 4.6.8 6.1.5.7 1.1 1.5 1.9 1.5.8 0 1-.5 2-.5s1.2.5 2 .5c.8 0 1.4-.7 1.9-1.4.6-.8.8-1.6.8-1.7 0 0-1.6-.6-1.6-2.5zM9.8 3.6c.4-.5.7-1.2.6-1.9-.6 0-1.4.4-1.8.9-.4.4-.7 1.1-.6 1.8.7.1 1.4-.3 1.8-.8z"/></svg>
-          Se connecter avec Apple
-        </button>
-        <p class="note">${dispo
-          ? "Pour retrouver les cours de ton iPhone. Le navigateur parle directement à ton iCloud, rien ne passe par nos serveurs."
-          : "La connexion iCloud n'est pas encore activée."}
-        </p>
-        <p class="note"><button class="lien" id="sansCompte">Continuer sans compte</button></p>`}
+      <div id="zoneConnexion">
+        ${dispo
+          ? `<div id="apple-sign-in-button" class="boutonApple"></div>
+             <p class="note">Préparation de la connexion…</p>`
+          : `<p class="note">La connexion iCloud n'est pas encore activée.</p>`}
+      </div>
+
+      <p class="note"><button class="lien" id="sansCompte">Continuer sans compte</button></p>
     </div>`;
 
   const entre = () => {
     try { localStorage.setItem(CLE_ACCUEIL_VU, "1"); } catch {}
     location.hash = "#/bibliotheque";
   };
-  const brancher = (id, action) => {
-    const b = document.getElementById(id);
-    if (b) b.onclick = action;
+  document.getElementById("sansCompte").onclick = () => {
+    suit("accueil_sans_compte");
+    entre();
+  };
+  if (!dispo) return;
+
+  const zone = document.getElementById("zoneConnexion");
+  const dire = (html) => {
+    const n = zone.querySelector(".note");
+    if (n) n.innerHTML = html;
   };
 
-  brancher("entrer", entre);
-  brancher("sansCompte", () => { suit("accueil_sans_compte"); entre(); });
-  brancher("deco", async () => { await icloud.deconnecte(); ecranAccueil(true); });
-  brancher("connexion", async () => {
-    const b = document.getElementById("connexion");
-    b.disabled = true;
-    b.textContent = "Connexion…";
+  let identite = null;
+  try {
+    identite = await icloud.prepareConnexion();
+  } catch (e) {
+    suit("icloud_sign_in_failed", { raison: String(e.message || e).slice(0, 60) });
+    dire(`<span class="erreurTexte">${echappe(e.message || e)}</span>`);
+    return;
+  }
+
+  const apresConnexion = async () => {
+    dire("Récupération de tes cours…");
     try {
-      await icloud.connecte();
+      const n = await importeDepuisICloud();
       suit("icloud_signed_in");
-      await importeDepuisICloud();
+      dire(`${n} cours récupéré${n > 1 ? "s" : ""}.`);
       entre();
     } catch (e) {
-      suit("icloud_sign_in_failed", { raison: String(e.message || e).slice(0, 60) });
-      b.disabled = false;
-      b.textContent = "Réessayer";
-      vue.insertAdjacentHTML("beforeend",
-        `<p class="note erreurTexte">${echappe(e.message || e)}</p>`);
+      suit("icloud_import_failed", { raison: String(e.message || e).slice(0, 60) });
+      dire(`<span class="erreurTexte">Connecté, mais la lecture a échoué : ${echappe(e.message || e)}</span>`);
     }
-  });
+  };
+
+  if (identite) return apresConnexion();
+
+  dire(`Connecte-toi pour retrouver les cours de ton iPhone. Le navigateur parle
+        directement à ton iCloud, rien ne passe par nos serveurs.`);
+  // Se résout au retour de la fenêtre Apple, après le clic sur SON bouton.
+  icloud.quandConnecte().then(apresConnexion).catch(() => {});
 }
 
 /** Verse les cours de l'iPhone dans la bibliothèque locale. */
