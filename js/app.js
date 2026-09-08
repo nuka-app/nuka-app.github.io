@@ -240,7 +240,16 @@ async function ecranDiagnostic() {
 /** Verse les cours de l'iPhone dans la bibliothèque locale. */
 async function importeDepuisICloud() {
   const cours = await icloud.coursDeliCloud();
-  for (const c of cours) await store.ajouteCours(c);
+  for (const c of cours) {
+    await store.ajouteCours(c);
+    // La progression venue du téléphone devient celle du site : sans ce
+    // report, toutes les cartes seraient dues et l'on réviserait ce qui vient
+    // d'être révisé sur l'iPhone.
+    for (let i = 0; i < c.cards.length; i++) {
+      const sm2 = c.cards[i].sm2;
+      if (sm2) await store.enregistre(c.id, i, sm2);
+    }
+  }
   const cartes = cours.reduce((n, c) => n + c.cards.length, 0);
   suit("icloud_courses_imported", {
     cours: String(cours.length), cartes: String(cartes),

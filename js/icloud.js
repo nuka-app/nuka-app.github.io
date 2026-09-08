@@ -178,46 +178,110 @@ export async function coursDeliCloud() {
 
   // Rattachement des cartes à leur cours.
   //
-  // Le nom du champ de relation n'est pas garanti : le miroir Core Data le
-  // dérive du modèle, et un renommage côté Swift le changerait ici. Plutôt que
-  // de parier sur « CD_course », on cherche parmi les champs de la carte
-  // celui qui EST une référence — il n'y en a qu'une.
+  // `CD_course` contient une CHAÎNE — le nom d'enregistrement du cours — et
+  // non une référence CloudKit. Vérifié sur les données réelles : c'est ainsi
+  // que le miroir Core Data encode une relation à un. Chercher un objet muni
+  // d'un `recordName`, comme je le faisais, ne pouvait rien trouver.
+  const nomsDeCours = new Set(cours.map(c => c.recordName));
   const parCours = {};
   for (const f of cartes) {
-    const ref = premiereReference(f);
-    const cle = ref && ref.recordName;
+    const cle = lienVersCours(f, nomsDeCours);
     if (cle) (parCours[cle] = parCours[cle] || []).push(f);
   }
 
-  return cours.map(co => ({
-    id: "icloud:" + co.recordName,
-    title: champ(co, "CD_title") || "Sans titre",
-    emoji: champ(co, "CD_emoji") || "📱",
-    courseDescription: champ(co, "CD_courseDescription") || "",
-    origine: "icloud",
-    cards: (parCours[co.recordName] || []).map(f => ({
-      recto: texte(champ(f, "CD_recto")),
-      verso: texte(champ(f, "CD_verso")),
-      explanation: texte(champ(f, "CD_explanation")),
-      distractors: distracteurs(champ(f, "CD_cachedDistractors")),
-    })).filter(x => x.recto && x.verso),
-  }));
-  // ⚠️ AUCUN filtre sur les cours vides ici.
-  //
-  // La version précédente écartait tout cours sans carte rattachée. Si le
-  // rattachement échoue — un nom de champ qui a changé, par exemple — ce
-  // filtre fait disparaître LA TOTALITÉ des cours, et l'écran affiche une
-  // bibliothèque vide sans le moindre indice. Mieux vaut un cours visible mais
-  // vide, qui dit où chercher.
+  return cours.map(co => {
+    const brutes = parCours[co.recordName] || [];
+    const versos = brutes.map(f => texte(champ(f, "CD_verso"))).filter(Boolean);
+    return {
+      id: "icloud:" + co.recordName,
+      title: texte(champ(co, "CD_title")) || "Sans titre",
+      emoji: texte(champ(co, "CD_emoji")) || texte(champ(co, "CD_icon")) || "📱",
+      courseDescription: texte(champ(co, "CD_courseDescription")),
+      origine: "icloud",
+      cards: brutes.map(f => {
+        const verso = texte(champ(f, "CD_verso"));
+        return {
+          recto: texte(champ(f, "CD_recto")),
+          verso,
+          explanation: texte(champ(f, "CD_explanation")),
+          distractors: distracteursOuVoisins(champ(f, "CD_cachedDistractors"), verso, versos),
+          // La progression du téléphone voyage avec la carte : sans elle, le
+          // site rendrait toutes les cartes dues et l'on réviserait ce qui
+          // vient d'être révisé.
+          sm2: progressionDepuis(f),
+        };
+      }).filter(x => x.recto && x.verso),
+    };
+  });
 }
 
-/** La première valeur de champ qui est une référence CloudKit. */
-function premiereReference(enr) {
-  for (const nom of Object.keys(enr.fields || {})) {
-    const v = enr.fields[nom].value;
-    if (v && typeof v === "object" && v.recordName) return v;
+/** Le cours auquel appartient une carte, quelle que soit la forme du champ. */
+function lienVersCours(carte, nomsDeCours) {
+  const v = champ(carte, "CD_course");
+  if (typeof v === "string" && v) return v;
+  if (v && typeof v === "object" && v.recordName) return v.recordName;
+  // Repli : si le nom du champ changeait, on reconnaîtrait quand même le lien
+  // à sa valeur, puisqu'elle désigne un cours existant.
+  for (const nom of Object.keys(carte.fields || {})) {
+    const val = carte.fields[nom].value;
+    if (typeof val === "string" && nomsDeCours.has(val)) return val;
+    if (val && val.recordName && nomsDeCours.has(val.recordName)) return val.recordName;
   }
   return null;
+}
+
+/**
+ * Les distracteurs de la carte, ou à défaut ceux de ses voisines.
+ *
+ * Les cartes créées dans l'app n'ont pas toujours de distracteurs en cache :
+ * l'app les demande au serveur au moment de la révision. Le site, lui, doit
+ * proposer quatre options tout de suite. Prendre les réponses d'autres cartes
+ * du même cours donne des options plausibles — c'est le procédé classique du
+ * QCM, et il vaut mieux qu'une carte injouable.
+ */
+function distracteursOuVoisins(cache, verso, tousLesVersos) {
+  const d = distracteurs(cache);
+  if (d.hard.length >= 3) return d;
+
+  const voisins = tousLesVersos.filter(v => v && v !== verso);
+  melange(voisins);
+  const trois = voisins.slice(0, 3);
+  return trois.length === 3
+    ? { easy: trois, medium: trois, hard: trois }
+    : d;
+}
+
+function melange(t) {
+  for (let i = t.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [t[i], t[j]] = [t[j], t[i]];
+  }
+}
+
+/** L'état SM-2 tel que le téléphone l'a laissé. */
+function progressionDepuis(f) {
+  const n = (nom) => {
+    const v = champ(f, nom);
+    return typeof v === "number" ? v : null;
+  };
+  const date = (nom) => {
+    const v = n(nom);
+    if (v == null) return null;
+    // CloudKit horodate en millisecondes ; on tolère les secondes au cas où.
+    return new Date(v > 1e11 ? v : v * 1000).toISOString();
+  };
+  return {
+    easinessFactor: n("CD_easinessFactor") ?? 2.5,
+    repetitions: n("CD_repetitions") ?? 0,
+    interval: n("CD_interval") ?? 0,
+    consecutiveCorrect: n("CD_consecutiveCorrect") ?? 0,
+    leechCount: n("CD_leechCount") ?? 0,
+    timesReviewed: n("CD_timesReviewed") ?? 0,
+    timesCorrect: n("CD_timesCorrect") ?? 0,
+    successRate: n("CD_successRate") ?? 0,
+    lastReviewed: date("CD_lastReviewed"),
+    nextReviewDate: date("CD_nextReviewDate"),
+  };
 }
 
 /** Le texte d'un champ, qu'il soit chaîne brute ou valeur enveloppée. */
