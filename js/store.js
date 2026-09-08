@@ -70,6 +70,28 @@ export const store = {
       m => m.put({ id: fichier.id, fichier, ajoute: new Date().toISOString() }));
   },
 
+  /**
+   * Réenregistre un cours modifié.
+   *
+   * Une carte ajoutée ou corrigée ne vit que dans ce navigateur : le site ne
+   * réécrit pas dans iCloud. C'est dit à l'utilisateur au moment où il édite,
+   * pas caché dans une page d'aide.
+   */
+  metAJourCours(fichier) {
+    return transaction("cours", "readwrite", m => m.put({
+      id: fichier.id, fichier, ajoute: new Date().toISOString(),
+    }));
+  },
+
+  /** Efface la progression d'un cours — après une suppression de carte. */
+  async effaceProgression(idCours) {
+    const tout = await transaction("progression", "readonly", m => m.getAll());
+    const aOter = (tout || []).filter(e => e.cle.startsWith(idCours + "#"));
+    for (const e of aOter) {
+      await transaction("progression", "readwrite", m => m.delete(e.cle));
+    }
+  },
+
   retireCours(id) {
     return transaction("cours", "readwrite", m => m.delete(id));
   },

@@ -365,6 +365,53 @@ async function ecranCours(id) {
 
     await vues.ecranCours(vue, id, fichier, prog, possede);
 
+    // Créer et corriger des cartes, comme dans l'application.
+    //
+    // Ces modifications restent dans ce navigateur : le site ne réécrit pas
+    // dans iCloud, et le formulaire le dit quand le cours vient du téléphone.
+    // Mieux vaut une édition locale annoncée qu'une absence d'édition.
+    const enregistre = async () => {
+      if (!(await store.possede(id))) await store.ajouteCours(fichier);
+      else await store.metAJourCours(fichier);
+      ecranCours(id);
+    };
+
+    const bAjout = document.getElementById("ajouterCarte");
+    if (bAjout) bAjout.onclick = () => vues.formulaireCarte({
+      venuDiCloud: fichier.origine === "icloud",
+      surEnregistrer: async (carte) => {
+        fichier.cards.push(carte);
+        suit("card_created", { cours: id });
+        await enregistre();
+      },
+    });
+
+    vue.querySelectorAll(".modifier").forEach(b => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const i = Number(b.dataset.i);
+        vues.formulaireCarte({
+          carte: fichier.cards[i], index: i,
+          venuDiCloud: fichier.origine === "icloud",
+          surEnregistrer: async (carte) => {
+            fichier.cards[i] = { ...fichier.cards[i], ...carte };
+            suit("card_edited_inline", { cours: id });
+            await enregistre();
+          },
+          surSupprimer: async () => {
+            fichier.cards.splice(i, 1);
+            // La progression est indexée par POSITION : supprimer une carte
+            // décale toutes les suivantes. On repart donc de zéro pour ce
+            // cours plutôt que de laisser des échéances attribuées à la
+            // mauvaise carte.
+            await store.effaceProgression(id);
+            suit("card_deleted", { cours: id });
+            await enregistre();
+          },
+        });
+      };
+    });
+
     document.getElementById("basculeBiblio").onclick = async () => {
       if (possede) {
         await store.retireCours(id);

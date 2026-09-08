@@ -229,13 +229,19 @@ export async function ecranCours(vue, id, fichier, prog, possede) {
       </button>
     </div>
 
-    <h2>Les ${fichier.cards.length} cartes</h2>
+    <div class="titreAction">
+      <h2>Les ${fichier.cards.length} cartes</h2>
+      <button class="bouton petit" id="ajouterCarte">+ Ajouter</button>
+    </div>
     <div class="cartes">${fichier.cards.map((c, i) => ligneCarte(c, i, prog[i])).join("")}</div>
 
     ${fichier.lesson ? `<h2>La leçon</h2><div class="lecon">${fichier.lesson}</div>` : ""}`;
 
   vue.querySelectorAll(".carteApercu").forEach(el => {
-    el.onclick = () => el.classList.toggle("ouverte");
+    el.onclick = (e) => {
+      if (e.target.closest(".modifier")) return;   // le crayon a son propre rôle
+      el.classList.toggle("ouverte");
+    };
   });
 }
 
@@ -251,6 +257,7 @@ function ligneCarte(carte, i, etat) {
     <div class="bas">
       <p class="verso"><strong>${echappe(carte.verso)}</strong></p>
       ${carte.explanation ? `<p class="meta">${echappe(carte.explanation)}</p>` : ""}
+      <button class="lien modifier" data-i="${i}">Modifier cette carte</button>
     </div>
   </div>`;
 }
@@ -310,4 +317,84 @@ export function ecranProfil(vue, { identite, environnement, surDeconnexion, surR
   const d = document.getElementById("deco");
   if (d) d.onclick = surDeconnexion;
   document.getElementById("mesure").onclick = surRefusMesure;
+}
+
+// ── Édition d'une carte ──────────────────────────────────────────────────
+//
+// Le formulaire vit dans une couche par-dessus la page plutôt que sur un
+// écran séparé : on garde sous les yeux la liste d'où l'on vient, et fermer
+// n'est jamais un aller-retour.
+
+export function formulaireCarte({ carte, index, surEnregistrer, surSupprimer, surFermer, venuDiCloud }) {
+  const nouvelle = !carte;
+  const c = carte || { recto: "", verso: "", explanation: "", distractors: { easy: [], medium: [], hard: [] } };
+
+  const couche = document.createElement("div");
+  couche.className = "couche";
+  couche.innerHTML = `
+    <div class="feuille">
+      <div class="feuilleHaut">
+        <h2>${nouvelle ? "Nouvelle carte" : `Carte ${index + 1}`}</h2>
+        <button class="lien" id="fermer">Fermer</button>
+      </div>
+
+      ${venuDiCloud ? `<p class="note avertit">Cette modification reste dans ce
+        navigateur : elle ne repartira pas vers ton iPhone.</p>` : ""}
+
+      <label>Question<textarea id="recto" rows="3"
+        placeholder="Ce que tu verras en premier">${echappe(c.recto)}</textarea></label>
+
+      <label>Réponse<textarea id="verso" rows="2"
+        placeholder="Ce qu'il faut retrouver">${echappe(c.verso)}</textarea></label>
+
+      <label>Explication <span class="facultatif">— facultative</span>
+        <textarea id="explication" rows="2"
+          placeholder="Pourquoi, ou ce qu'il ne faut pas confondre">${echappe(c.explanation || "")}</textarea></label>
+
+      <label>Mauvaises réponses <span class="facultatif">— une par ligne, pour le QCM</span>
+        <textarea id="distracteurs" rows="3"
+          placeholder="À défaut, les réponses des autres cartes du cours serviront">${
+            echappe(((c.distractors && c.distractors.hard) || []).join("\n"))}</textarea></label>
+
+      <div class="actions">
+        <button class="bouton" id="enregistrer">${nouvelle ? "Ajouter" : "Enregistrer"}</button>
+        ${nouvelle ? "" : `<button class="bouton danger" id="supprimer">Supprimer</button>`}
+      </div>
+      <p class="erreurTexte" id="souci" hidden></p>
+    </div>`;
+
+  document.body.appendChild(couche);
+  const q = (id) => couche.querySelector("#" + id);
+  q("recto").focus();
+
+  const ferme = () => { couche.remove(); surFermer && surFermer(); };
+  q("fermer").onclick = ferme;
+  couche.onclick = (e) => { if (e.target === couche) ferme(); };
+
+  q("enregistrer").onclick = () => {
+    const recto = q("recto").value.trim();
+    const verso = q("verso").value.trim();
+    if (!recto || !verso) {
+      const s = q("souci");
+      s.hidden = false;
+      s.textContent = "Une carte a besoin d'une question ET d'une réponse.";
+      return;
+    }
+    const durs = q("distracteurs").value.split("\n").map(x => x.trim()).filter(Boolean);
+    surEnregistrer({
+      recto, verso,
+      explanation: q("explication").value.trim(),
+      // Les trois paliers reçoivent les mêmes valeurs : seul le difficile est
+      // servi, ici comme dans l'application depuis le 05/09/2026.
+      distractors: { easy: durs, medium: durs, hard: durs },
+    });
+    couche.remove();
+  };
+
+  const sup = q("supprimer");
+  if (sup) sup.onclick = () => {
+    if (!confirm("Supprimer cette carte ? C'est définitif.")) return;
+    surSupprimer();
+    couche.remove();
+  };
 }

@@ -6,7 +6,8 @@
   --bord: #26262F;
   --texte: #F2F2F7;
   --doux: #9A9AA8;
-  --accent: #6C5CE7;
+  --accent: #1D3461;
+  --accent2: #E8792B;
   --juste: #2ECC71;
   --faux: #E74C3C;
   --rayon: 16px;
@@ -16,6 +17,11 @@
     --fond: #FAFAFC; --fond2: #FFFFFF; --bord: #E4E4EC;
     --texte: #14141A; --doux: #6B6B7B;
   }
+}
+/* En sombre, le bleu nuit de la marque se confondrait avec le fond :
+   l'accent s'éclaircit pour rester lisible, l'orange ne bouge pas. */
+@media (prefers-color-scheme: dark) {
+  :root { --accent: #5B7FC7; }
 }
 
 * { box-sizing: border-box; }
@@ -31,7 +37,11 @@ header {
   position: sticky; top: 0; background: color-mix(in srgb, var(--fond) 88%, transparent);
   backdrop-filter: blur(12px); z-index: 10;
 }
-.marque { font-weight: 800; font-size: 20px; color: var(--texte); text-decoration: none; letter-spacing: -0.02em; }
+.marque {
+  font-weight: 800; font-size: 20px; color: var(--texte); text-decoration: none;
+  letter-spacing: -0.02em; display: inline-flex; align-items: center; gap: 9px;
+}
+.marque img { border-radius: 7px; }
 nav { display: flex; gap: 6px; }
 nav a {
   color: var(--doux); text-decoration: none; font-size: 14px; font-weight: 600;
@@ -259,3 +269,41 @@ a.carte.aReviser h3 { margin: 0; }
 /* ══ Profil ══ */
 main .carte p { margin: 0 0 10px; font-size: 15px; }
 main .carte p:last-of-type { margin-bottom: 12px; }
+
+/* ══ Couche d'édition ══════════════════════════════════════════════════════
+   Par-dessus la page et non à sa place : on garde la liste sous les yeux, et
+   fermer ne coûte pas un aller-retour de navigation. */
+.couche {
+  position: fixed; inset: 0; z-index: 50; padding: 20px;
+  background: rgba(0, 0, 0, .45); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto;
+}
+.feuille {
+  background: var(--fond); border: 1px solid var(--bord); border-radius: 18px;
+  padding: 22px; width: 100%; max-width: 520px; margin: auto 0;
+}
+.feuilleHaut { display: flex; align-items: center; justify-content: space-between; }
+.feuilleHaut h2 { margin: 0 0 14px; text-transform: none; letter-spacing: 0;
+                  font-size: 19px; color: var(--texte); }
+.feuille label {
+  display: block; font-size: 13px; font-weight: 650; color: var(--doux);
+  margin-bottom: 14px;
+}
+.feuille .facultatif { font-weight: 400; }
+.feuille textarea {
+  display: block; width: 100%; margin-top: 6px; padding: 11px 13px;
+  font: inherit; font-size: 15px; color: var(--texte); background: var(--fond2);
+  border: 1px solid var(--bord); border-radius: 11px; resize: vertical;
+}
+.feuille textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.note.avertit {
+  background: color-mix(in srgb, var(--accent2) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent2) 40%, transparent);
+  border-radius: 10px; padding: 9px 12px; margin: 0 0 16px; color: var(--texte);
+}
+.bouton.danger, button.danger { background: var(--faux); }
+.bouton.petit, button.petit { padding: 7px 14px; font-size: 13px; }
+.titreAction { display: flex; align-items: center; justify-content: space-between; }
+.titreAction h2 { margin-bottom: 10px; }
+.carteApercu .modifier { margin-top: 4px; font-size: 13px; }
