@@ -55,16 +55,42 @@ let conteneur = null;
 
 export function configure() { return !!JETON; }
 
-/** Charge CloudKit JS à la demande : inutile de le peser si on ne s'en sert pas. */
+/**
+ * Charge CloudKit JS à la demande — d'abord chez Apple, sinon depuis ce site.
+ *
+ * La copie locale n'est pas une commodité : le script d'Apple est BLOQUÉ par
+ * la plupart des bloqueurs de publicité et extensions de confidentialité, qui
+ * traitent un domaine tiers chargeant du script comme un traqueur. Le
+ * navigateur répond alors ERR_BLOCKED_BY_CLIENT, la connexion iCloud devient
+ * impossible, et l'utilisateur n'a aucun moyen de comprendre pourquoi.
+ *
+ * On tente donc l'original — c'est la voie recommandée par Apple, et elle
+ * apporte les correctifs — puis on se replie sur la copie servie depuis notre
+ * propre origine, que rien ne peut bloquer. Le fichier est nommé `ck.js` et
+ * non `cloudkit.js` : certaines règles de filtrage visent le nom lui-même.
+ *
+ * Licence : Apple concède ce fichier aux développeurs pour fournir des
+ * services CloudKit Web, ce qui est précisément l'usage ici.
+ */
 function chargeSDK() {
   if (window.CloudKit) return Promise.resolve();
-  return new Promise((ok, ko) => {
+
+  const essaie = (src) => new Promise((ok, ko) => {
     const s = document.createElement("script");
-    s.src = "https://cdn.apple-cloudkit.com/ck/2/cloudkit.js";
-    s.onload = ok;
-    s.onerror = () => ko(new Error("CloudKit JS n'a pas pu être chargé."));
+    s.src = src;
+    s.onload = () => (window.CloudKit ? ok() : ko(new Error("chargé mais vide")));
+    s.onerror = () => ko(new Error("bloqué ou injoignable"));
     document.head.appendChild(s);
   });
+
+  return essaie("https://cdn.apple-cloudkit.com/ck/2/cloudkit.js")
+    .catch(() => essaie("vendor/ck.js"))
+    .catch(() => {
+      throw new Error(
+        "Le module de connexion Apple n'a pas pu être chargé. " +
+        "Un bloqueur de contenu l'empêche probablement de s'exécuter."
+      );
+    });
 }
 
 async function prepare() {
