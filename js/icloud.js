@@ -211,33 +211,46 @@ function distracteurs(brut) {
 }
 
 /**
- * Énumère un type d'enregistrement dans la zone Core Data.
+ * Parcourt la zone Core Data et répartit les enregistrements par type.
  *
  * ⚠️ PAS de `performQuery`. Interroger un type demande un index « queryable »
  * sur `recordName`, et `NSPersistentCloudKitContainer` n'en crée aucun : sa
  * synchronisation ne procède pas par requêtes mais par parcours de zone. Une
- * requête échoue donc avec « Field 'recordName' is not marked queryable », et
- * la corriger côté console supposerait de modifier le schéma d'un conteneur en
- * production — pour un besoin de lecture seule, c'est disproportionné.
+ * requête échoue donc sur « Field 'recordName' is not marked queryable », et
+ * la corriger supposerait de modifier le schéma d'un conteneur en production
+ * — disproportionné pour une lecture seule, et risqué sur des données réelles.
  *
- * `fetchRecordChanges` sans jeton renvoie tout le contenu de la zone. C'est le
- * chemin qu'emprunte la synchronisation elle-même : aucun index requis, aucune
- * modification de schéma.
+ * La méthode s'appelle `fetchRecordZoneChanges` et non `fetchRecordChanges` :
+ * vérifié dans le SDK, après m'être trompé de nom une première fois.
+ *
+ * Elle accepte une ou plusieurs zones, d'où une réponse qui peut arriver sous
+ * deux formes — enveloppée dans `zones[]`, ou à plat. On accepte les deux
+ * plutôt que d'en parier une.
  */
 async function parcourtZone(bdd) {
   const parType = {};
   let jeton = null;
   do {
-    const options = jeton ? { syncToken: jeton } : {};
-    const r = await bdd.fetchRecordChanges({ zoneName: ZONE }, options);
-    if (r.hasErrors) {
+    const demande = { zoneID: { zoneName: ZONE } };
+    if (jeton) demande.syncToken = jeton;
+
+    const r = await bdd.fetchRecordZoneChanges(demande);
+    if (r && r.hasErrors) {
       const e = r.errors[0];
       throw new Error(e.reason || e.ckErrorCode || "lecture refusée");
     }
-    for (const enr of r.records || []) {
-      (parType[enr.recordType] = parType[enr.recordType] || []).push(enr);
+    const bloc = (r && r.zones && r.zones[0]) || r || {};
+    if (bloc.hasErrors) {
+      const e = bloc.errors[0];
+      throw new Error(e.reason || e.ckErrorCode || "zone illisible");
     }
-    jeton = r.moreComing ? r.syncToken : null;
+
+    const enregistrements = bloc.records || [];
+    for (const enr of enregistrements) {
+      const type = enr.recordType;
+      if (type) (parType[type] = parType[type] || []).push(enr);
+    }
+    jeton = bloc.moreComing ? bloc.syncToken : null;
   } while (jeton);
   return parType;
 }
