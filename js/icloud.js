@@ -240,9 +240,20 @@ export async function inventaire() {
   const parType = await parcourtZone(c.privateCloudDatabase);
   const resume = {};
   for (const [type, liste] of Object.entries(parType)) {
+    const premier = liste[0];
     resume[type] = {
       nombre: liste.length,
-      champs: liste[0] ? Object.keys(liste[0].fields || {}).slice(0, 24) : [],
+      champs: premier ? Object.keys(premier.fields || {}).slice(0, 30) : [],
+      // La FORME des valeurs compte autant que leur nom : c'est elle qui dit
+      // si un champ est une référence vers un autre enregistrement.
+      formes: premier ? Object.fromEntries(
+        Object.entries(premier.fields || {}).slice(0, 30).map(([k, v]) => {
+          const val = v && v.value;
+          if (val && typeof val === "object") {
+            return [k, val.recordName ? "référence" : "objet(" + Object.keys(val).slice(0, 3) + ")"];
+          }
+          return [k, typeof val];
+        })) : {},
     };
   }
   return { environnement: ENVIRONNEMENT, zone: ZONE, types: resume };

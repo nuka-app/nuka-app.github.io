@@ -131,9 +131,20 @@ async function ecranAccueil(force = false) {
   const apresConnexion = async () => {
     dire("Récupération de tes cours…");
     try {
-      const n = await importeDepuisICloud();
+      const { cours: n, cartes } = await importeDepuisICloud();
       suit("icloud_signed_in");
       rafraichitCompte();
+
+      // Des cours sans aucune carte : le symptôme est différent d'une
+      // bibliothèque vide et sa cause aussi. On montre la forme réelle des
+      // enregistrements plutôt que de laisser deviner.
+      if (n > 0 && cartes === 0) {
+        const inv = await icloud.inventaire();
+        dire(`${n} cours récupéré${n > 1 ? "s" : ""}, mais aucune carte.<br>
+              <span class="releve">${echappe(JSON.stringify(inv.types))}</span>`);
+        suit("icloud_cartes_absentes", { cours: String(n) });
+        return;
+      }
       if (n === 0) {
         // Zéro cours n'est pas forcément une bibliothèque vide : ce peut être
         // le mauvais environnement, une autre zone, ou des champs renommés. On
@@ -146,7 +157,7 @@ async function ecranAccueil(force = false) {
         suit("icloud_vide", { environnement: inv.environnement });
         return;
       }
-      dire(`${n} cours récupéré${n > 1 ? "s" : ""}.`);
+      dire(`${n} cours et ${cartes} cartes récupérés.`);
       entre();
     } catch (e) {
       suit("icloud_import_failed", { raison: String(e.message || e).slice(0, 60) });
@@ -180,8 +191,11 @@ function messageBloqueur() {
 async function importeDepuisICloud() {
   const cours = await icloud.coursDeliCloud();
   for (const c of cours) await store.ajouteCours(c);
-  suit("icloud_courses_imported", { cours: String(cours.length) });
-  return cours.length;
+  const cartes = cours.reduce((n, c) => n + c.cards.length, 0);
+  suit("icloud_courses_imported", {
+    cours: String(cours.length), cartes: String(cartes),
+  });
+  return { cours: cours.length, cartes };
 }
 
 // ── Utilitaires de rendu ──────────────────────────────────────────────────
