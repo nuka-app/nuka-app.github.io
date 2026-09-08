@@ -176,3 +176,13 @@ button.lien {
   display: inline-block; font-family: ui-monospace, monospace; font-size: 11px;
   color: var(--doux); word-break: break-all; margin: 6px 0;
 }
+
+table.diag { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 18px; }
+table.diag td { border: 1px solid var(--bord); padding: 6px 10px; }
+table.diag td:first-child { font-family: ui-monospace, monospace; width: 55%; }
+table.diag td:last-child { color: var(--doux); }
+.releveBrut {
+  width: 100%; min-height: 220px; margin-top: 14px; font-family: ui-monospace, monospace;
+  font-size: 11px; background: var(--fond2); color: var(--texte);
+  border: 1px solid var(--bord); border-radius: 10px; padding: 10px;
+}

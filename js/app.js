@@ -22,6 +22,7 @@ const routes = {
   "catalogue":   (p) => ecranCatalogue(p[0]),
   "cours":       (p) => ecranCours(p.join("/")),
   "reviser":     (p) => ecranRevision(p.join("/")),
+  "diagnostic":  () => ecranDiagnostic(),
 };
 
 function route() {
@@ -194,6 +195,46 @@ function messageBloqueur() {
     Apple.</span><br>Autorise <code>apple-cloudkit.com</code> dans ton bloqueur,
     ou ouvre cette page dans une fenêtre sans extensions. Le catalogue, lui,
     fonctionne sans connexion.`;
+}
+
+// ── Diagnostic iCloud ─────────────────────────────────────────────────────
+//
+// Une page plutôt qu'un message d'erreur : elle se visite quand on veut, se
+// relit, et se recopie d'un bouton. Quand une lecture échoue sans dire
+// pourquoi, c'est ce relevé qui tranche.
+
+async function ecranDiagnostic() {
+  attente("Lecture de ta zone iCloud…");
+  try {
+    const inv = await icloud.inventaire();
+    const lignes = Object.entries(inv.types).map(([type, d]) => `
+      <h2>${echappe(type)} — ${d.nombre} enregistrement${d.nombre > 1 ? "s" : ""}</h2>
+      <table class="diag">
+        ${Object.entries(d.formes).map(([champ, forme]) => `
+          <tr><td>${echappe(champ)}</td><td>${echappe(forme)}</td></tr>`).join("")}
+      </table>`).join("");
+
+    vue.innerHTML = `
+      <a class="retour" href="#/bibliotheque">← Ma bibliothèque</a>
+      <h1>Diagnostic iCloud</h1>
+      <p class="intro">Environnement <code>${echappe(inv.environnement)}</code>,
+         zone <code>${echappe(inv.zone)}</code>.</p>
+      <button class="bouton" id="copier">Copier le relevé</button>
+      ${lignes || "<p class='intro'>Aucun enregistrement dans cette zone.</p>"}`;
+
+    document.getElementById("copier").onclick = async () => {
+      const texte = JSON.stringify(inv, null, 2);
+      try {
+        await navigator.clipboard.writeText(texte);
+        document.getElementById("copier").textContent = "Copié";
+      } catch {
+        // Le presse-papiers peut être refusé : on montre le texte à recopier
+        // plutôt que d'échouer sans recours.
+        vue.insertAdjacentHTML("beforeend",
+          `<textarea class="releveBrut" readonly>${echappe(texte)}</textarea>`);
+      }
+    };
+  } catch (e) { erreur(e); }
 }
 
 /** Verse les cours de l'iPhone dans la bibliothèque locale. */
