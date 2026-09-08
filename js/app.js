@@ -26,11 +26,20 @@ const routes = {
 
 function route() {
   const brut = location.hash.replace(/^#\/?/, "");
-  const [nom, ...reste] = brut.split("/");
+  // Décodage indispensable : les identifiants iCloud contiennent un « : »,
+  // encodé en %3A dans le lien. Sans cette étape, l'identifiant lu ne
+  // correspond à aucun cours et la page conclut qu'il n'existe pas — alors
+  // qu'il est bien dans la bibliothèque, deux lignes plus haut.
+  const [nom, ...reste] = brut.split("/").map(decodeUnPeu);
   (routes[nom] || routes[""])(reste);
   nav.querySelectorAll("a").forEach(a =>
     a.classList.toggle("actif", a.getAttribute("href") === `#/${nom}`));
 }
+/** Décode sans jamais lever : un identifiant mal formé ne doit pas casser la page. */
+function decodeUnPeu(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
 addEventListener("hashchange", route);
 addEventListener("hashchange", rafraichitCompte);
 addEventListener("DOMContentLoaded", () => {
@@ -335,7 +344,11 @@ async function chargeCours(id) {
   if (local) return local.fichier;
   const m = await manifeste();
   const resume = m.courses.find(c => c.id === id);
-  if (!resume) throw new Error("Ce cours n'existe pas dans le catalogue.");
+  if (!resume) {
+    throw new Error(id.startsWith("icloud:")
+      ? "Ce cours vient de ton iCloud mais n'est plus dans ce navigateur. Reconnecte-toi pour le récupérer."
+      : "Ce cours n'existe pas dans le catalogue.");
+  }
   return cours(resume);
 }
 
