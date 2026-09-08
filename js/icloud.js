@@ -170,8 +170,11 @@ export async function coursDeliCloud() {
   const c = await prepare();
   const bdd = c.privateCloudDatabase;
 
-  const cours = await tout(bdd, "CD_Course");
-  const cartes = await tout(bdd, "CD_Flashcard");
+  // Un seul parcours de zone, réparti ensuite par type : la relire deux fois
+  // doublerait le temps d'attente pour rien.
+  const parType = await parcourtZone(bdd);
+  const cours = parType["CD_Course"] || [];
+  const cartes = parType["CD_Flashcard"] || [];
 
   // Les cartes pointent vers leur cours par une référence CloudKit.
   const parCours = {};
@@ -207,15 +210,34 @@ function distracteurs(brut) {
   } catch { return { easy: [], medium: [], hard: [] }; }
 }
 
-/** Pagination : CloudKit renvoie par lots, il faut suivre le curseur. */
-async function tout(bdd, type) {
-  const acc = [];
-  let reponse = await bdd.performQuery({ recordType: type }, { zoneName: ZONE });
-  while (reponse) {
-    if (reponse.hasErrors) throw new Error(reponse.errors[0].ckErrorCode || "requête refusée");
-    acc.push(...(reponse.records || []));
-    if (!reponse.moreComing) break;
-    reponse = await bdd.performQuery(reponse);
-  }
-  return acc;
+/**
+ * Énumère un type d'enregistrement dans la zone Core Data.
+ *
+ * ⚠️ PAS de `performQuery`. Interroger un type demande un index « queryable »
+ * sur `recordName`, et `NSPersistentCloudKitContainer` n'en crée aucun : sa
+ * synchronisation ne procède pas par requêtes mais par parcours de zone. Une
+ * requête échoue donc avec « Field 'recordName' is not marked queryable », et
+ * la corriger côté console supposerait de modifier le schéma d'un conteneur en
+ * production — pour un besoin de lecture seule, c'est disproportionné.
+ *
+ * `fetchRecordChanges` sans jeton renvoie tout le contenu de la zone. C'est le
+ * chemin qu'emprunte la synchronisation elle-même : aucun index requis, aucune
+ * modification de schéma.
+ */
+async function parcourtZone(bdd) {
+  const parType = {};
+  let jeton = null;
+  do {
+    const options = jeton ? { syncToken: jeton } : {};
+    const r = await bdd.fetchRecordChanges({ zoneName: ZONE }, options);
+    if (r.hasErrors) {
+      const e = r.errors[0];
+      throw new Error(e.reason || e.ckErrorCode || "lecture refusée");
+    }
+    for (const enr of r.records || []) {
+      (parType[enr.recordType] = parType[enr.recordType] || []).push(enr);
+    }
+    jeton = r.moreComing ? r.syncToken : null;
+  } while (jeton);
+  return parType;
 }
